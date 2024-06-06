@@ -10,8 +10,7 @@ use alloy_primitives::{U256};
 use stylus_sdk::{
     msg, prelude::*
 };
-use crate::erc721::{Erc721, Erc721Params};
-use erc721::Erc721Error;
+use crate::erc721::{Erc721, Erc721Params, Erc721Error};
 
 /// Initializes a custom, global allocator for Rust programs compiled to WASM.
 #[global_allocator]
@@ -40,40 +39,18 @@ sol_storage! {
     }
 }
 
-/// Represents the ways methods may fail.
-pub enum StylusNFTError {
-    Erc721Error(Erc721Error),
-}
-
-impl Into<Vec<u8>> for StylusNFTError {
-    fn into(self) -> Vec<u8> {
-        match self {
-            Self::Erc721Error(err) => err.into(),
-        }
-    }
-}
-
-impl From<Erc721Error> for StylusNFTError {
-    fn from(err: Erc721Error) -> Self {
-        StylusNFTError::Erc721Error(err)
-    }
-}
-
-// Result wrapper
-type Result<T, E = StylusNFTError> = core::result::Result<T, E>;
-
 #[external]
 #[inherit(Erc721<StylusNFTParams>)]
 impl StylusNFT {
     /// Mints an NFT
-    pub fn mint(&mut self) -> Result<()> {
+    pub fn mint(&mut self) -> Result<(), Erc721Error> {
         let minter = msg::sender();
         self.erc721.mint(minter)?;
         Ok(())
     }
 
     /// Burns an NFT
-    pub fn burn(&mut self, token_id: U256) -> Result<()> {
+    pub fn burn(&mut self, token_id: U256) -> Result<(), Erc721Error> {
         // This function checks that msg::sender() owns the specified token_id
         self.erc721.burn(msg::sender(), token_id)?;
         Ok(())
