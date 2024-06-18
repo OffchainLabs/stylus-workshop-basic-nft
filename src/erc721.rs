@@ -17,7 +17,8 @@ use stylus_sdk::{
     abi::Bytes,
     evm,
     msg,
-    prelude::*
+    prelude::*,
+    call::Error
 };
 
 pub trait Erc721Params {
@@ -65,6 +66,8 @@ sol! {
     error TransferToZero(uint256 token_id);
     // The receiver address refused to receive the specified token id
     error ReceiverRefused(address receiver, uint256 token_id, bytes4 returned);
+    // Error thrown when call receiver address by onERC721Received
+    error CallReceiverFailed(bytes revert);
 }
 
 /// Represents the ways methods may fail.
@@ -75,7 +78,7 @@ pub enum Erc721Error {
     NotApproved(NotApproved),
     TransferToZero(TransferToZero),
     ReceiverRefused(ReceiverRefused),
-    ExternalCall(stylus_sdk::call::Error),
+    CallReceiverFailed(CallReceiverFailed),
 }
 
 // These methods aren't external, but are helpers used by external methods.
@@ -156,10 +159,14 @@ impl<T: Erc721Params> Erc721<T> {
     ) -> Result<(), Erc721Error> {
         if to.has_code() {
             let receiver = IERC721TokenReceiver::new(to);
-            let received = receiver
-                .on_erc_721_received(&mut *storage, msg::sender(), from, token_id, data)?
-                .0;
-
+            // call onERC721Received
+            let result = receiver.on_erc_721_received(&mut *storage, msg::sender(), from, token_id, data);
+            // check the return value
+            let received = match result {
+                Ok(received) => received.0,
+                Err(Error::Revert(revert)) => return Err(Erc721Error::CallReceiverFailed(CallReceiverFailed { revert })),
+                Err(err) => return Err(Erc721Error::CallReceiverFailed(CallReceiverFailed { revert: err.into() })),
+            };
             if u32::from_be_bytes(received) != ERC721_TOKEN_RECEIVER_ID {
                 return Err(Erc721Error::ReceiverRefused(ReceiverRefused {
                     receiver: receiver.address,
